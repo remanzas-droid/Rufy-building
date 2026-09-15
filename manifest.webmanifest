@@ -1,0 +1,19 @@
+{
+  "name": "Rufy Building",
+  "short_name": "Rufy",
+  "description": "Diario palestra personale offline-first",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090c12",
+  "theme_color": "#0b0f18",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0f18">
+  <meta name="description" content="Rufy Building - diario palestra offline-first">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <title>Rufy Building</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">Rufy <span>Building</span></div>
+      <div class="subtitle">Diario palestra · offline-first</div>
+    </div>
+    <button id="installBtn" class="ghost hidden" type="button">Installa</button>
+  </header>
+
+  <main id="app">
+    <section id="view-home" class="view active">
+      <div class="hero card">
+        <div>
+          <div class="eyebrow">PROSSIMO ALLENAMENTO</div>
+          <h1 id="nextWorkoutTitle">A</h1>
+          <p id="nextWorkoutDesc">Full Body A</p>
+        </div>
+        <button id="startNextBtn" class="primary big" type="button">Inizia</button>
+      </div>
+
+      <div id="phaseBanner" class="card callout"></div>
+
+      <div class="grid2">
+        <article class="card">
+          <div class="eyebrow">ULTIMA SEDUTA</div>
+          <div id="lastSession" class="metric">Nessuna</div>
+          <div id="lastSessionMeta" class="muted">Registra la prima seduta</div>
+        </article>
+        <article class="card">
+          <div class="eyebrow">RECUPERO RECENTE</div>
+          <div id="recoveryState" class="metric">—</div>
+          <div id="recoveryMeta" class="muted">Dati non disponibili</div>
+        </article>
+      </div>
+
+      <article class="card">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">SCELTA MANUALE</div>
+            <h2>Allenamento di oggi</h2>
+          </div>
+        </div>
+        <div class="segmented">
+          <button class="workout-choice" data-workout="A" type="button">A</button>
+          <button class="workout-choice" data-workout="B" type="button">B</button>
+          <button class="workout-choice" data-workout="C" type="button">C</button>
+        </div>
+      </article>
+    </section>
+
+    <section id="view-workout" class="view">
+      <div id="precheckPanel" class="card">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">PRIMA DELLA SEDUTA</div>
+            <h2 id="precheckTitle">Check rapido</h2>
+          </div>
+        </div>
+        <p class="muted">Facoltativo. Serve solo a contestualizzare lo storico; non modifica automaticamente la scheda.</p>
+        <div class="check-grid">
+          <label>Sonno
+            <select id="sleepScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+          <label>Fatica
+            <select id="fatigueScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+          <label>DOMS gambe
+            <select id="domsScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+          <label>Stress
+            <select id="stressScore"><option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+        </div>
+        <label>Dolore / fastidio
+          <select id="painLevel">
+            <option value="nessuno">Nessuno</option>
+            <option value="lieve">Lieve</option>
+            <option value="moderato">Moderato</option>
+            <option value="forte">Forte</option>
+          </select>
+        </label>
+        <label>Zona / nota
+          <input id="painNote" type="text" placeholder="es. spalla destra nelle spinte">
+        </label>
+        <button id="beginSessionBtn" class="primary full" type="button">Apri allenamento</button>
+      </div>
+
+      <div id="sessionPanel" class="hidden">
+        <div class="session-header card">
+          <div>
+            <div class="eyebrow">SEDUTA IN CORSO</div>
+            <h2 id="sessionTitle">Full Body A</h2>
+            <div id="sessionGuidance" class="muted"></div>
+          </div>
+          <button id="cancelSessionBtn" class="ghost" type="button">Chiudi</button>
+        </div>
+
+        <div id="exerciseList"></div>
+
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">ESERCIZIO EXTRA</div>
+              <h3>Aggiungi esercizio</h3>
+            </div>
+          </div>
+          <div class="inline-form">
+            <select id="customExerciseSelect"></select>
+            <button id="addExerciseBtn" class="secondary" type="button">Aggiungi</button>
+          </div>
+        </article>
+
+        <label class="card">Note seduta
+          <textarea id="sessionNote" rows="3" placeholder="Sensazioni, tecnica, fatica, corsa del giorno prima..."></textarea>
+        </label>
+
+        <button id="saveSessionBtn" class="primary full sticky-action" type="button">Salva seduta</button>
+      </div>
+    </section>
+
+    <section id="view-history" class="view">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">ARCHIVIO</div>
+          <h2>Storico</h2>
+        </div>
+        <button id="exportCsvBtn" class="ghost" type="button">CSV</button>
+      </div>
+
+      <article class="card">
+        <label>Esercizio
+          <select id="historyExerciseFilter">
+            <option value="">Tutti gli esercizi</option>
+          </select>
+        </label>
+      </article>
+
+      <div id="historyList"></div>
+    </section>
+
+    <section id="view-stats" class="view">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">DATI UTILI</div>
+          <h2>Statistiche</h2>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <article class="card">
+          <div class="eyebrow">SEDUTE TOTALI</div>
+          <div id="statSessions" class="metric">0</div>
+        </article>
+        <article class="card">
+          <div class="eyebrow">ULTIMI 7 GIORNI</div>
+          <div id="statWeek" class="metric">0</div>
+        </article>
+      </div>
+
+      <article class="card">
+        <div class="eyebrow">SERIE PER GRUPPO MUSCOLARE · ULTIMI 7 GIORNI</div>
+        <div id="muscleVolume"></div>
+      </article>
+
+      <article class="card">
+        <div class="eyebrow">ADERENZA · ULTIME 8 SETTIMANE</div>
+        <div id="adherenceChart" class="bars"></div>
+      </article>
+
+      <article class="card">
+        <div class="eyebrow">ANDAMENTO ESERCIZIO</div>
+        <label>Seleziona esercizio
+          <select id="progressExerciseSelect"></select>
+        </label>
+        <div id="progressSummary" class="muted">Scegli un esercizio con almeno due registrazioni.</div>
+      </article>
+
+      <article id="deloadCard" class="card callout hidden">
+        <div class="eyebrow">FATICA</div>
+        <h3>Valuta uno scarico</h3>
+        <p id="deloadReason"></p>
+        <p class="muted">È un'indicazione basata sui dati registrati, non una modifica automatica del programma.</p>
+      </article>
+    </section>
+
+    <section id="view-program" class="view">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">PROGRAMMA</div>
+          <h2>Fase 1 · Rientro</h2>
+        </div>
+        <button id="toggleEditBtn" class="ghost" type="button">Modifica programma</button>
+      </div>
+
+      <article class="card">
+        <h3>Indicazioni RIR</h3>
+        <p><strong>Settimana 1:</strong> circa 4 RIR sui multiarticolari e 3 sugli isolamenti.</p>
+        <p><strong>Settimana 2:</strong> circa 3 RIR.</p>
+        <p><strong>Settimane 3–4:</strong> prevalentemente 2–3 RIR.</p>
+        <p class="muted">Niente cedimento programmato nella fase iniziale. Le indicazioni restano scritte: sei tu a gestire l'autoregolazione.</p>
+      </article>
+
+      <article class="card">
+        <h3>Progressione</h3>
+        <p>Usa una doppia progressione: mantieni il carico finché non raggiungi la parte alta del range con il RIR previsto. Poi aumenta moderatamente il carico.</p>
+        <p class="muted">Rufy Building registra: non suggerisce automaticamente il carico.</p>
+      </article>
+
+      <div id="programList"></div>
+
+      <article id="editProgramPanel" class="card hidden">
+        <div class="eyebrow">MODALITÀ MODIFICA</div>
+        <h3>Aggiungi esercizio alla libreria</h3>
+        <div class="stack">
+          <input id="newExerciseName" type="text" placeholder="Nome esercizio">
+          <input id="newExerciseMuscle" type="text" placeholder="Gruppo muscolare">
+          <button id="addLibraryExerciseBtn" class="secondary" type="button">Aggiungi alla libreria</button>
+        </div>
+        <hr>
+        <h3>Modifica A / B / C</h3>
+        <p class="muted">Le modifiche valgono dalle prossime sedute. Lo storico già registrato non viene alterato.</p>
+        <div id="programEditor"></div>
+        <hr>
+        <h3>Backup dati</h3>
+        <div class="action-row">
+          <button id="exportJsonBtn" class="ghost" type="button">Esporta backup</button>
+          <label class="file-btn">Importa backup<input id="importJsonInput" type="file" accept="application/json"></label>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navigazione">
+    <button class="nav-btn active" data-view="home" type="button">Home</button>
+    <button class="nav-btn" data-view="workout" type="button">Allenamento</button>
+    <button class="nav-btn" data-view="history" type="button">Storico</button>
+    <button class="nav-btn" data-view="stats" type="button">Statistiche</button>
+    <button class="nav-btn" data-view="program" type="button">Programma</button>
+  </nav>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
