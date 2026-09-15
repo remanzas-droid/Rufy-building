@@ -1,6 +1,6 @@
 {
   "name": "Rufy Building",
-  "short_name": "Rufy",
+  "short_name": "Rufy-building",
   "description": "Diario palestra personale offline-first",
   "start_url": "./index.html",
   "scope": "./",
