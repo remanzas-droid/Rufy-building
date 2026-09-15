@@ -1,5 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
 <rect width="512" height="512" rx="108" fill="#090c12"/>
-<path d="M106 152h70v34h-70zm230 0h70v34h-70zM72 188h36v136H72zm332 0h36v136h-36zM108 238h296v36H108z" fill="#2f6fe4"/>
-<path d="M175 148h38v216h-38zm124 0h38v216h-38z" fill="#f4f7fb"/>
+<rect x="78" y="218" width="356" height="76" rx="30" fill="#2f6fe4"/>
+<rect x="98" y="166" width="42" height="180" rx="18" fill="#f4f7fb"/>
+<rect x="372" y="166" width="42" height="180" rx="18" fill="#f4f7fb"/>
+<rect x="54" y="198" width="34" height="116" rx="14" fill="#2f6fe4"/>
+<rect x="424" y="198" width="34" height="116" rx="14" fill="#2f6fe4"/>
+<circle cx="256" cy="256" r="72" fill="#090c12"/>
+<text x="256" y="278" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="66" font-weight="900" fill="#f4f7fb">RB</text>
 </svg>

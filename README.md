@@ -1,4 +1,4 @@
-# Rufy Building — PWA V1
+# Rufy-building — PWA V1.1
 
 ## Pubblicazione consigliata: GitHub Pages
 
@@ -43,3 +43,9 @@ Questa cartella è pronta per essere pubblicata direttamente come sito statico.
 - Segnale semplice di possibile deload
 - Modifica programma A/B/C
 - Funzionamento offline dopo il primo caricamento
+
+## Novità V1.1
+- Nome installato: Rufy-building
+- Icone Android 192/512 e splash coerente col tema dark/lapislazzuli
+- Eliminazione di una seduta dallo Storico con doppia conferma
+- Ricalcolo automatico della rotazione A/B/C dopo l'eliminazione

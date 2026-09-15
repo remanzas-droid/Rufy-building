@@ -82,6 +82,7 @@ function store(name,mode='readonly'){ return state.db.transaction(name,mode).obj
 function dbGetKV(key){ return new Promise((res,rej)=>{ const r=store('kv').get(key); r.onsuccess=()=>res(r.result?.value); r.onerror=()=>rej(r.error); }); }
 function dbSetKV(key,value){ return new Promise((res,rej)=>{ const r=store('kv','readwrite').put({key,value}); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 function dbAddSession(s){ return new Promise((res,rej)=>{ const r=store('sessions','readwrite').put(s); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function dbDeleteSession(id){ return new Promise((res,rej)=>{ const r=store('sessions','readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 function dbAllSessions(){ return new Promise((res,rej)=>{ const r=store('sessions').getAll(); r.onsuccess=()=>res((r.result||[]).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt)); r.onerror=()=>rej(r.error); }); }
 function dbClearAll(){ return new Promise((res,rej)=>{ const tx=state.db.transaction(['sessions','kv'],'readwrite'); tx.objectStore('sessions').clear(); tx.objectStore('kv').clear(); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
 
@@ -297,9 +298,37 @@ async function renderHistory(){
     const card=document.createElement('article'); card.className='card history-card';
     card.innerHTML=`<div class="session-line"><div><div class="eyebrow">${esc(s.workout?'FULL BODY '+s.workout:'SEDUTA')}</div><h3>${fmtDate(s.date)}</h3></div><div class="muted">${esc(s.recovery?.pain||'')}</div></div>`+
       exs.map(e=>`<div class="history-ex"><strong>${esc(e.actualName||e.name)}</strong> ${e.status&&e.status!=='normale'?`<span class="pill">${esc(e.status)}</span>`:''}<div class="muted">${formatSets(e.sets)}</div></div>`).join('')+
-      (s.note?`<p class="muted">${esc(s.note)}</p>`:'');
+      (s.note?`<p class="muted">${esc(s.note)}</p>`:'')+
+      `<div class="history-actions"><button class="danger delete-session-btn" data-session-id="${esc(s.id)}" data-session-date="${esc(s.date)}" data-session-workout="${esc(s.workout||'')}" type="button">Elimina allenamento</button></div>`;
     root.appendChild(card);
   });
+  root.querySelectorAll('.delete-session-btn').forEach(btn=>btn.addEventListener('click',()=>deleteSavedSession(btn.dataset.sessionId,btn.dataset.sessionDate,btn.dataset.sessionWorkout)));
+}
+async function deleteSavedSession(id,date,workout){
+  const label=`${workout?'Full Body '+workout:'allenamento'} del ${fmtDate(date)}`;
+  const first=window.confirm(`Vuoi eliminare ${label}?\n\nQuesta operazione rimuoverà la seduta dallo storico.`);
+  if(!first) return;
+  const second=window.confirm(`CONFERMA DEFINITIVA\n\nEliminare davvero ${label}? L'operazione non può essere annullata.`);
+  if(!second) return;
+  await dbDeleteSession(id);
+  await recalculateSettingsAfterDeletion();
+  toast('Allenamento eliminato');
+  await renderHistory();
+}
+async function recalculateSettingsAfterDeletion(){
+  const sessions=await dbAllSessions();
+  const cycle={A:'B',B:'C',C:'A'};
+  if(!sessions.length){
+    state.settings.nextWorkout='A';
+    state.settings.firstSessionDate=null;
+  }else{
+    const latest=sessions[0];
+    state.settings.nextWorkout=cycle[latest.workout]||state.settings.nextWorkout||'A';
+    const dates=sessions.map(s=>s.date).filter(Boolean).sort();
+    state.settings.firstSessionDate=dates[0]||null;
+  }
+  await dbSetKV('settings',state.settings);
+  await renderHome();
 }
 function formatSets(sets){
   if(!Array.isArray(sets)||!sets.length) return 'Nessuna serie registrata';
