@@ -136,7 +136,13 @@
           <div class="eyebrow">ARCHIVIO</div>
           <h2>Storico</h2>
         </div>
-        <button id="exportCsvBtn" class="ghost" type="button">CSV</button>
+        <div class="action-row">
+  <button id="exportCsvBtn" class="ghost" type="button">Esporta CSV</button>
+  <label class="file-btn">
+    Importa CSV
+    <input id="importCsvInput" type="file" accept=".csv,text/csv">
+  </label>
+</div>
       </div>
 
       <article class="card">
@@ -253,5 +259,6 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
+  <script src="import-csv.js"></script>
 </body>
 </html>
