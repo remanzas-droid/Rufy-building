@@ -10,7 +10,7 @@ function showMessage(message) {
   el.textContent = message;
   el.classList.remove('hidden');
   clearTimeout(showMessage.timer);
-  showMessage.timer = setTimeout(() => el.classList.add('hidden'), 3200);
+  showMessage.timer = setTimeout(() => el.classList.add('hidden'), 3600);
 }
 
 function parseCSV(text) {
@@ -38,7 +38,7 @@ function slug(value) {
   return String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-    .slice(0, 48) || 'exercise';
+    .slice(0, 40) || 'exercise';
 }
 
 function numberOrNull(value) {
@@ -46,6 +46,42 @@ function numberOrNull(value) {
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function norm(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function shortHash(value) {
+  let h = 2166136261;
+  const s = String(value);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function sessionSignature(session) {
+  const rows = [];
+  (session.exercises || []).forEach(e => {
+    const name = norm(e.actualName || e.name);
+    const status = norm(e.status || 'normale');
+    const muscle = norm(e.muscle || '');
+    (Array.isArray(e.sets) ? e.sets : []).forEach((set, i) => {
+      rows.push([
+        name,
+        status,
+        i + 1,
+        set?.kg ?? '',
+        set?.reps ?? '',
+        norm(set?.rir ?? ''),
+        muscle
+      ].join('|'));
+    });
+  });
+  rows.sort();
+  return [session.date || '', norm(session.workout || ''), ...rows].join('||');
 }
 
 function openDB() {
@@ -64,20 +100,21 @@ function getKV(db, key) {
   });
 }
 
-function getSession(db, id) {
+function getAllSessions(db) {
   return new Promise((resolve, reject) => {
-    const req = db.transaction('sessions').objectStore('sessions').get(id);
-    req.onsuccess = () => resolve(req.result || null);
+    const req = db.transaction('sessions').objectStore('sessions').getAll();
+    req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
 }
 
-function importRecords(db, sessions, library) {
+function importRecords(db, sessions, library, settings) {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['sessions', 'kv'], 'readwrite');
     const sessionStore = tx.objectStore('sessions');
     sessions.forEach(s => sessionStore.put(s));
     tx.objectStore('kv').put({ key: 'library', value: library });
+    if (settings) tx.objectStore('kv').put({ key: 'settings', value: settings });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -87,15 +124,19 @@ async function importCSV(file) {
   const rows = parseCSV(await file.text());
   if (rows.length < 2) throw new Error('CSV vuoto o senza dati');
 
-  const header = rows[0].map(v => String(v).trim().toLowerCase());
+  const header = rows[0].map(v => norm(v));
   const required = ['data','workout','esercizio','stato','serie','kg','reps','rir','muscolo'];
   const idx = Object.fromEntries(required.map(k => [k, header.indexOf(k)]));
   if (required.some(k => idx[k] < 0)) throw new Error('Formato CSV non riconosciuto');
 
   const db = await openDB();
+  const existingSessions = await getAllSessions(db);
+  const existingSignatures = new Set(existingSessions.map(sessionSignature));
+
   const storedLibrary = await getKV(db, 'library');
   const library = Array.isArray(storedLibrary) ? storedLibrary : [];
-  const libraryByName = new Map(library.map(e => [String(e.name).trim().toLowerCase(), e]));
+  const libraryByName = new Map(library.map(e => [norm(e.name), e]));
+
   const groups = new Map();
   let validRows = 0;
 
@@ -106,12 +147,19 @@ async function importCSV(file) {
     const status = String(r[idx.stato] || '').trim() || 'normale';
     const setNo = Math.max(1, parseInt(r[idx.serie], 10) || 1);
     const muscleCsv = String(r[idx.muscolo] || '').trim();
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
 
-    const keyName = name.toLowerCase();
+    const keyName = norm(name);
     let lib = libraryByName.get(keyName);
     if (!lib) {
-      lib = { id: `csv_${slug(name)}`, name, muscle: muscleCsv || 'Altro' };
+      let baseId = `csv_${slug(name)}`;
+      let candidate = baseId;
+      let n = 2;
+      while (library.some(x => x.id === candidate && norm(x.name) !== keyName)) {
+        candidate = `${baseId}_${n++}`;
+      }
+      lib = { id: candidate, name, muscle: muscleCsv || 'Altro' };
       library.push(lib);
       libraryByName.set(keyName, lib);
     }
@@ -119,7 +167,6 @@ async function importCSV(file) {
     const groupKey = `${date}||${workout}`;
     if (!groups.has(groupKey)) {
       groups.set(groupKey, {
-        id: `csv_${date}_${slug(workout || 'extra')}`,
         date,
         workout,
         createdAt: new Date(`${date}T12:00:00`).getTime(),
@@ -131,7 +178,7 @@ async function importCSV(file) {
     }
 
     const session = groups.get(groupKey);
-    const exKey = `${keyName}||${status}||${lib.id}`;
+    const exKey = `${keyName}||${norm(status)}||${lib.id}`;
     let ex = session._exerciseMap.get(exKey);
     if (!ex) {
       ex = {
@@ -147,37 +194,88 @@ async function importCSV(file) {
       session.exercises.push(ex);
     }
 
-    while (ex.sets.length < setNo) ex.sets.push({ kg: null, reps: null, rir: null });
+    while (ex.sets.length < setNo) ex.sets.push({ kg: null, reps: null, rir: '' });
     ex.sets[setNo - 1] = {
       kg: numberOrNull(r[idx.kg]),
       reps: numberOrNull(r[idx.reps]),
-      rir: String(r[idx.rir] ?? '').trim() || null
+      rir: String(r[idx.rir] ?? '').trim()
     };
     validRows++;
   }
 
-  const sessions = [...groups.values()].map(s => {
-    delete s._exerciseMap;
-    return s;
-  });
-  if (!validRows || !sessions.length) throw new Error('Nessuna riga valida trovata');
+  let duplicateCount = 0;
+  const sessions = [];
 
-  let overwritten = 0;
-  for (const s of sessions) if (await getSession(db, s.id)) overwritten++;
-  await importRecords(db, sessions, library);
+  for (const s of groups.values()) {
+    delete s._exerciseMap;
+    const signature = sessionSignature(s);
+
+    if (existingSignatures.has(signature)) {
+      duplicateCount++;
+      continue;
+    }
+
+    s.id = `csv_${s.date}_${slug(s.workout || 'extra')}_${shortHash(signature)}`;
+    existingSignatures.add(signature);
+    sessions.push(s);
+  }
+
+  if (!validRows) {
+    db.close();
+    throw new Error('Nessuna riga valida trovata');
+  }
+
+  if (!sessions.length) {
+    db.close();
+    return { sessions: 0, rows: validRows, duplicates: duplicateCount };
+  }
+
+  const settings = (await getKV(db, 'settings')) || {
+    nextWorkout: 'A',
+    firstSessionDate: null,
+    phaseDismissed: false
+  };
+
+  const allDates = [...existingSessions, ...sessions]
+    .map(s => s.date)
+    .filter(Boolean)
+    .sort();
+
+  if (allDates.length) settings.firstSessionDate = allDates[0];
+
+  if (!existingSessions.length && sessions.length) {
+    const newest = [...sessions].sort((a, b) =>
+      String(b.date).localeCompare(String(a.date)) || (b.createdAt || 0) - (a.createdAt || 0)
+    )[0];
+    const cycle = { A: 'B', B: 'C', C: 'A' };
+    if (cycle[newest.workout]) settings.nextWorkout = cycle[newest.workout];
+  }
+
+  await importRecords(db, sessions, library, settings);
   db.close();
 
-  return { sessions: sessions.length, rows: validRows, overwritten };
+  return {
+    sessions: sessions.length,
+    rows: validRows,
+    duplicates: duplicateCount
+  };
 }
 
 input.addEventListener('change', async e => {
   const file = e.target.files?.[0];
   if (!file) return;
+
   try {
     const result = await importCSV(file);
-    const extra = result.overwritten ? ` · ${result.overwritten} già presenti aggiornate` : '';
-    showMessage(`CSV importato: ${result.sessions} sedute · ${result.rows} serie${extra}`);
-    setTimeout(() => location.reload(), 1200);
+
+    if (!result.sessions && result.duplicates) {
+      showMessage(`CSV controllato: ${result.duplicates} sedute già presenti, nessun duplicato creato`);
+    } else {
+      const dup = result.duplicates ? ` · ${result.duplicates} già presenti ignorate` : '';
+      showMessage(`CSV importato: ${result.sessions} nuove sedute · ${result.rows} serie${dup}`);
+    }
+
+    setTimeout(() => location.reload(), 1400);
   } catch (err) {
     console.error(err);
     showMessage(err?.message || 'Importazione CSV non riuscita');
