@@ -1,0 +1,39 @@
+RUFY-BUILDING — MODIFICA IMPORT CSV + NUOVA ICONA
+
+1) Carica/sostituisci nella root del repository questi file:
+   - import-csv.js
+   - sw.js
+   - icon-192.png
+   - icon-512.png
+
+2) In index.html, nello Storico, sostituisci:
+   <button id="exportCsvBtn" class="ghost" type="button">CSV</button>
+
+   con:
+   <div class="action-row">
+     <button id="exportCsvBtn" class="ghost" type="button">Esporta CSV</button>
+     <label class="file-btn">Importa CSV<input id="importCsvInput" type="file" accept=".csv,text/csv"></label>
+   </div>
+
+3) In fondo a index.html, sostituisci:
+   <script src="app.js"></script>
+
+   con:
+   <script src="app.js"></script>
+   <script src="import-csv.js"></script>
+
+4) Il manifest è già corretto: usa icon-192.png e icon-512.png.
+   Non serve modificarlo.
+
+COMPORTAMENTO IMPORT:
+- accetta il CSV esportato da Rufy-building;
+- riconosce le colonne data, workout, esercizio, stato, serie, kg, reps, rir, muscolo;
+- ricostruisce le sedute e le serie nello storico;
+- aggiunge alla libreria eventuali esercizi non ancora presenti;
+- NON cancella lo storico esistente;
+- se reimporti lo stesso CSV, le sedute importate con lo stesso identificatore vengono aggiornate invece di essere duplicate.
+
+DOPO IL CARICAMENTO:
+- apri la PWA una volta con connessione;
+- attendi qualche secondo e ricaricala;
+- se l'icona sulla Home non cambia subito, rimuovi e reinstalla la PWA: Android può conservare in cache l'icona installata.
