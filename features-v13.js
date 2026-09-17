@@ -1,6 +1,10 @@
 (() => {
 'use strict';
 
+// Rufy Building v1.3.1
+// Hotfix: evita il loop del MutationObserver della v1.3 e inizializza sempre
+// l'allenamento A/B/C quando si entra direttamente dalla scheda Allenamento.
+
 const DB_NAME = 'rufyBuildingDB';
 const DB_VERSION = 1;
 const currentModes = new Map();
@@ -46,6 +50,7 @@ async function withDB(fn) {
 
 function getAllSessionsFromDB(db) {
   return new Promise((resolve, reject) => {
+    if (!db.objectStoreNames.contains('sessions')) { resolve([]); return; }
     const req = db.transaction('sessions').objectStore('sessions').getAll();
     req.onsuccess = () => resolve((req.result || []).sort((a, b) =>
       String(b.date || '').localeCompare(String(a.date || '')) || (b.createdAt || 0) - (a.createdAt || 0)
@@ -56,6 +61,7 @@ function getAllSessionsFromDB(db) {
 
 function getKVFromDB(db, key) {
   return new Promise((resolve, reject) => {
+    if (!db.objectStoreNames.contains('kv')) { resolve(undefined); return; }
     const req = db.transaction('kv').objectStore('kv').get(key);
     req.onsuccess = () => resolve(req.result?.value);
     req.onerror = () => reject(req.error);
@@ -103,14 +109,11 @@ async function createAutoBackup(reason) {
 
 function armBackupForNextSessionPut(reason) {
   clearTimeout(backupRequestTimer);
-  backupRequest = {
-    reason,
-    modes: new Map(currentModes)
-  };
+  backupRequest = {reason, modes: new Map(currentModes)};
   backupRequestTimer = setTimeout(() => { backupRequest = null; }, 4000);
 }
 
-// Intercetta il salvataggio originale della PWA senza modificare app.js.
+// Mantiene il salvataggio originale dell'app e aggiunge la modalità peso + backup.
 const nativePut = IDBObjectStore.prototype.put;
 IDBObjectStore.prototype.put = function(value, ...args) {
   const pending = this.name === 'sessions' && backupRequest ? backupRequest : null;
@@ -121,6 +124,7 @@ IDBObjectStore.prototype.put = function(value, ...args) {
     backupRequest = null;
     clearTimeout(backupRequestTimer);
   }
+
   const req = nativePut.call(this, value, ...args);
   if (pending) {
     req.addEventListener('success', () => {
@@ -155,10 +159,16 @@ async function findLastModeByExerciseName(name) {
 
 function updateWeightButton(btn, card, mode) {
   const per = mode === 'perDumbbell';
-  btn.textContent = per ? 'Peso: per manubrio' : 'Peso: totale';
+  const label = per ? 'Peso: per manubrio' : 'Peso: totale';
+
+  // IMPORTANTE: nella v1.3 textContent veniva riscritto a ogni passaggio.
+  // Poiché il MutationObserver osserva childList, questo generava un loop infinito.
+  if (btn.textContent !== label) btn.textContent = label;
   btn.classList.toggle('v13-per-dumbbell', per);
+
+  const placeholder = per ? 'kg/man.' : 'kg';
   card.querySelectorAll('input.kg').forEach(inp => {
-    inp.placeholder = per ? 'kg/man.' : 'kg';
+    if (inp.placeholder !== placeholder) inp.placeholder = placeholder;
   });
 }
 
@@ -187,17 +197,18 @@ function decorateWorkout() {
     const existing = currentModes.get(idx);
     if (existing) {
       updateWeightButton(btn, card, existing);
-    } else {
-      const name = card.querySelector('.exercise-title')?.textContent?.trim() || '';
-      currentModes.set(idx, 'total');
-      updateWeightButton(btn, card, 'total');
-      findLastModeByExerciseName(name).then(mode => {
-        if (currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
-          currentModes.set(idx, mode);
-          if (document.body.contains(card)) updateWeightButton(btn, card, mode);
-        }
-      });
+      return;
     }
+
+    const name = card.querySelector('.exercise-title')?.textContent?.trim() || '';
+    currentModes.set(idx, 'total');
+    updateWeightButton(btn, card, 'total');
+    findLastModeByExerciseName(name).then(mode => {
+      if (currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
+        currentModes.set(idx, mode);
+        if (document.body.contains(card)) updateWeightButton(btn, card, mode);
+      }
+    });
   });
 }
 
@@ -251,7 +262,8 @@ async function decorateHistory() {
         if (!ex) return;
         const mode = weightMode(ex.weightMode);
         const muted = row.querySelector('.muted');
-        if (muted) muted.textContent = formatSets(ex.sets, mode);
+        const formatted = formatSets(ex.sets, mode);
+        if (muted && muted.textContent !== formatted) muted.textContent = formatted;
         if (mode === 'perDumbbell' && !row.querySelector('.v13-weight-pill')) {
           const pill = document.createElement('span');
           pill.className = 'pill v13-weight-pill';
@@ -527,87 +539,8 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
-function parseCsvSimple(text) {
-  const rows = [];
-  let row = [], field = '', quoted = false;
-  const src = String(text || '').replace(/^\uFEFF/, '');
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (quoted) {
-      if (ch === '"' && src[i + 1] === '"') { field += '"'; i++; }
-      else if (ch === '"') quoted = false;
-      else field += ch;
-    } else {
-      if (ch === '"') quoted = true;
-      else if (ch === ',') { row.push(field); field = ''; }
-      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
-      else if (ch !== '\r') field += ch;
-    }
-  }
-  if (field.length || row.length) { row.push(field); rows.push(row); }
-  return rows;
-}
-
-function parseModeCell(v) {
-  const x = norm(v).replace(/[\s-]+/g, '_');
-  return ['per_manubrio','per_dumbbell','manubrio','dumbbell'].includes(x) ? 'perDumbbell' : 'total';
-}
-
-async function patchImportedWeightModes(file) {
-  try {
-    const rows = parseCsvSimple(await file.text());
-    if (rows.length < 2) return;
-    const header = rows[0].map(norm);
-    const modeIdx = header.indexOf('modalita_peso');
-    if (modeIdx < 0) return;
-    const dateIdx = header.indexOf('data');
-    const workoutIdx = header.indexOf('workout');
-    const exIdx = header.indexOf('esercizio');
-    if (dateIdx < 0 || workoutIdx < 0 || exIdx < 0) return;
-
-    const perDumbbellKeys = new Set();
-    rows.slice(1).forEach(r => {
-      if (parseModeCell(r[modeIdx]) === 'perDumbbell') {
-        perDumbbellKeys.add(`${String(r[dateIdx] || '').trim()}||${norm(r[workoutIdx])}||${norm(r[exIdx])}`);
-      }
-    });
-    if (!perDumbbellKeys.size) return;
-
-    for (let attempt = 0; attempt < 8; attempt++) {
-      await new Promise(r => setTimeout(r, 120));
-      const changed = await withDB(async db => {
-        const sessions = await getAllSessionsFromDB(db);
-        const updates = [];
-        sessions.forEach(session => {
-          let dirty = false;
-          (session.exercises || []).forEach(ex => {
-            const key = `${String(session.date || '').trim()}||${norm(session.workout)}||${norm(ex.actualName || ex.name)}`;
-            if (perDumbbellKeys.has(key) && ex.weightMode !== 'perDumbbell') {
-              ex.weightMode = 'perDumbbell';
-              dirty = true;
-            }
-          });
-          if (dirty) updates.push(session);
-        });
-        if (!updates.length) return false;
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction('sessions', 'readwrite');
-          updates.forEach(s => tx.objectStore('sessions').put(s));
-          tx.oncomplete = resolve;
-          tx.onerror = () => reject(tx.error);
-        });
-        return true;
-      });
-      if (changed) return;
-    }
-  } catch (err) {
-    console.error('Ripristino modalità peso CSV non riuscito', err);
-  }
-}
-
-async function exportCsvWithWeightMode() {
-  try {
-    const sessions = await withDB(getAllSessionsFromDB);
+function exportCsvWithWeightMode() {
+  withDB(getAllSessionsFromDB).then(sessions => {
     const rows = [['data','workout','esercizio','stato','serie','kg','reps','rir','muscolo','modalita_peso']];
     sessions.slice().reverse().forEach(s => (s.exercises || []).forEach(e => (e.sets || []).forEach((x, i) => rows.push([
       s.date || '', s.workout || '', e.actualName || e.name || '', e.status || '', i + 1,
@@ -617,41 +550,86 @@ async function exportCsvWithWeightMode() {
     const d = new Date();
     const date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     downloadBlob(new Blob([csv], {type:'text/csv;charset=utf-8'}), `rufy-building-${date}.csv`);
-  } catch (err) {
+  }).catch(err => {
     console.error(err);
     showToast('Esportazione CSV non riuscita');
-  }
+  });
+}
+
+function savePrecheckValues() {
+  const ids = ['sleepScore','fatigueScore','domsScore','stressScore','painLevel','painNote'];
+  return Object.fromEntries(ids.map(id => [id, document.getElementById(id)?.value ?? '']));
+}
+
+function restorePrecheckValues(values) {
+  Object.entries(values).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+}
+
+function workoutNeedsInitialization() {
+  const precheck = document.getElementById('precheckPanel');
+  if (!precheck || precheck.classList.contains('hidden')) return false;
+  const title = document.getElementById('precheckTitle')?.textContent?.trim() || '';
+  return title === 'Check rapido' || /Full Body\s+(?:null|undefined)\b/i.test(title);
+}
+
+function initializeWorkoutFromNext() {
+  if (!workoutNeedsInitialization()) return false;
+  const values = savePrecheckValues();
+  const start = document.getElementById('startNextBtn');
+  if (!start) return false;
+  start.click();
+  restorePrecheckValues(values);
+  return true;
 }
 
 function init() {
   injectStyles();
   ensureEditOverlay();
 
-  document.getElementById('beginSessionBtn')?.addEventListener('click', () => currentModes.clear(), true);
+  // Se si entra direttamente dalla tab Allenamento, seleziona il prossimo A/B/C.
+  document.querySelector('.nav-btn[data-view="workout"]')?.addEventListener('click', () => {
+    setTimeout(() => initializeWorkoutFromNext(), 0);
+  });
+
+  // Fallback: garantisce A/B/C anche se l'utente preme subito "Apri allenamento".
+  document.getElementById('beginSessionBtn')?.addEventListener('click', () => {
+    initializeWorkoutFromNext();
+    currentModes.clear();
+  }, true);
+
   document.getElementById('saveSessionBtn')?.addEventListener('click', () => armBackupForNextSessionPut('salvataggio'), true);
 
-  // Sostituisce solo l'esportazione CSV, mantenendo l'importatore esistente.
   document.getElementById('exportCsvBtn')?.addEventListener('click', e => {
     e.preventDefault();
     e.stopImmediatePropagation();
     exportCsvWithWeightMode();
   }, true);
 
-  // Se il CSV nuovo contiene la modalità peso, la riapplica dopo l'import esistente.
-  document.getElementById('importCsvInput')?.addEventListener('change', e => {
-    const file = e.target.files?.[0];
-    if (file) patchImportedWeightModes(file);
-  }, true);
-
   const exerciseList = document.getElementById('exerciseList');
   if (exerciseList) {
-    new MutationObserver(() => queueMicrotask(decorateWorkout)).observe(exerciseList, {childList:true,subtree:true});
+    let workoutQueued = false;
+    const observer = new MutationObserver(() => {
+      if (workoutQueued) return;
+      workoutQueued = true;
+      queueMicrotask(() => {
+        workoutQueued = false;
+        decorateWorkout();
+      });
+    });
+    observer.observe(exerciseList, {childList:true, subtree:true});
     decorateWorkout();
   }
 
   const historyList = document.getElementById('historyList');
   if (historyList) {
-    new MutationObserver(() => setTimeout(decorateHistory, 0)).observe(historyList, {childList:true,subtree:true});
+    let historyTimer = null;
+    new MutationObserver(() => {
+      clearTimeout(historyTimer);
+      historyTimer = setTimeout(decorateHistory, 0);
+    }).observe(historyList, {childList:true, subtree:true});
     decorateHistory();
   }
 }
