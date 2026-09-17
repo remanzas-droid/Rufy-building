@@ -52,6 +52,11 @@ function norm(value) {
   return String(value ?? '').trim().toLowerCase();
 }
 
+function parseWeightMode(value) {
+  const v = norm(value).replace(/[\s-]+/g, '_');
+  return ['per_manubrio','per_dumbbell','manubrio','dumbbell'].includes(v) ? 'perDumbbell' : 'total';
+}
+
 function shortHash(value) {
   let h = 2166136261;
   const s = String(value);
@@ -68,6 +73,7 @@ function sessionSignature(session) {
     const name = norm(e.actualName || e.name);
     const status = norm(e.status || 'normale');
     const muscle = norm(e.muscle || '');
+    const weightMode = e.weightMode === 'perDumbbell' ? 'per_manubrio' : 'totale';
     (Array.isArray(e.sets) ? e.sets : []).forEach((set, i) => {
       rows.push([
         name,
@@ -76,7 +82,8 @@ function sessionSignature(session) {
         set?.kg ?? '',
         set?.reps ?? '',
         norm(set?.rir ?? ''),
-        muscle
+        muscle,
+        weightMode
       ].join('|'));
     });
   });
@@ -128,6 +135,7 @@ async function importCSV(file) {
   const required = ['data','workout','esercizio','stato','serie','kg','reps','rir','muscolo'];
   const idx = Object.fromEntries(required.map(k => [k, header.indexOf(k)]));
   if (required.some(k => idx[k] < 0)) throw new Error('Formato CSV non riconosciuto');
+  const weightModeIndex = header.indexOf('modalita_peso');
 
   const db = await openDB();
   const existingSessions = await getAllSessions(db);
@@ -147,6 +155,7 @@ async function importCSV(file) {
     const status = String(r[idx.stato] || '').trim() || 'normale';
     const setNo = Math.max(1, parseInt(r[idx.serie], 10) || 1);
     const muscleCsv = String(r[idx.muscolo] || '').trim();
+    const weightMode = weightModeIndex >= 0 ? parseWeightMode(r[weightModeIndex]) : 'total';
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
 
@@ -188,10 +197,13 @@ async function importCSV(file) {
         actualName: name,
         muscle: muscleCsv || lib.muscle || 'Altro',
         status,
+        weightMode,
         sets: []
       };
       session._exerciseMap.set(exKey, ex);
       session.exercises.push(ex);
+    } else if (weightMode === 'perDumbbell') {
+      ex.weightMode = 'perDumbbell';
     }
 
     while (ex.sets.length < setNo) ex.sets.push({ kg: null, reps: null, rir: '' });
@@ -283,4 +295,12 @@ input.addEventListener('change', async e => {
     e.target.value = '';
   }
 });
+})();
+
+// Rufy Building v1.3 feature loader
+(() => {
+  const s = document.createElement('script');
+  s.src = './features-v13.js';
+  s.async = false;
+  document.body.appendChild(s);
 })();
