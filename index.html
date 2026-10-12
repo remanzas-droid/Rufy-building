@@ -30,6 +30,16 @@
         <button id="startNextBtn" class="primary big" type="button">Inizia</button>
       </div>
 
+      <article id="draftCard" class="card callout hidden">
+        <div class="eyebrow">SEDUTA IN CORSO</div>
+        <h3>Hai una seduta da completare</h3>
+        <p id="draftSummary" class="muted"></p>
+        <div class="action-row">
+          <button id="resumeDraftBtn" class="primary" type="button">Riprendi seduta</button>
+          <button id="discardDraftBtn" class="danger" type="button">Scarta seduta</button>
+        </div>
+      </article>
+
       <div id="phaseBanner" class="card callout"></div>
 
       <div class="grid2">
@@ -103,6 +113,7 @@
             <div class="eyebrow">SEDUTA IN CORSO</div>
             <h2 id="sessionTitle">Full Body A</h2>
             <div id="sessionGuidance" class="muted"></div>
+            <div id="draftStatus" class="muted" role="status" aria-live="polite"></div>
           </div>
           <button id="cancelSessionBtn" class="ghost" type="button">Chiudi</button>
         </div>
@@ -260,6 +271,7 @@
 
   <script src="app.js"></script>
   <script src="import-csv.js"></script>
+  <script src="features-v13.js"></script>
   <script src="backup-ui-v132.js"></script>
 </body>
 </html>

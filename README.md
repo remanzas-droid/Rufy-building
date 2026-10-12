@@ -49,3 +49,13 @@ Questa cartella è pronta per essere pubblicata direttamente come sito statico.
 - Icone Android 192/512 e splash coerente col tema dark/lapislazzuli
 - Eliminazione di una seduta dallo Storico con doppia conferma
 - Ricalcolo automatico della rotazione A/B/C dopo l'eliminazione
+
+## Novità V1.4 — seduta recuperabile
+
+- Ogni modifica a kg, reps, RIR, note, serie, esercizi e modalità peso salva subito una bozza locale, senza scaricare backup.
+- Dopo una chiusura o un riavvio, Home mostra “Riprendi seduta”. “Chiudi” conserva la bozza; “Scarta seduta” richiede due conferme.
+- Una seduta in corso impedisce di sovrascriverla iniziandone un'altra.
+- “Salva seduta” registra storico e impostazioni in una sola transazione. Solo dopo il completamento elimina la bozza e crea il backup automatico. Se il salvataggio fallisce la seduta rimane modificabile.
+- Ripristinato il caricamento del modulo esistente per modalità peso, modifica storico e backup automatico.
+- La bozza resta sullo stesso dispositivo e indirizzo dell'app. Non è un backup: cancellare i dati del sito la elimina. Non recupera dati persi prima dell'aggiornamento.
+- Per aggiornare una PWA già installata, aprirla online, chiuderla e riaprirla dopo l'installazione del nuovo service worker. Non cancellare i dati del sito.

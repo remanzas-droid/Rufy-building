@@ -127,7 +127,7 @@ IDBObjectStore.prototype.put = function(value, ...args) {
 
   const req = nativePut.call(this, value, ...args);
   if (pending) {
-    req.addEventListener('success', () => {
+    this.transaction.addEventListener('complete', () => {
       setTimeout(async () => {
         try {
           await createAutoBackup(pending.reason);
@@ -190,12 +190,14 @@ function decorateWorkout() {
       btn.addEventListener('click', () => {
         const next = currentModes.get(idx) === 'perDumbbell' ? 'total' : 'perDumbbell';
         currentModes.set(idx, next);
+        window.rufyDraftModes?.set(idx, next);
         updateWeightButton(btn, card, next);
       });
     }
 
-    const existing = currentModes.get(idx);
+    const existing = window.rufyDraftModes?.get(idx) || currentModes.get(idx);
     if (existing) {
+      currentModes.set(idx, existing);
       updateWeightButton(btn, card, existing);
       return;
     }
@@ -204,8 +206,9 @@ function decorateWorkout() {
     currentModes.set(idx, 'total');
     updateWeightButton(btn, card, 'total');
     findLastModeByExerciseName(name).then(mode => {
-      if (currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
+      if (document.body.contains(card) && !window.rufyDraftModes?.get(idx) && currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
         currentModes.set(idx, mode);
+        window.rufyDraftModes?.set(idx, mode);
         if (document.body.contains(card)) updateWeightButton(btn, card, mode);
       }
     });
@@ -586,6 +589,7 @@ function initializeWorkoutFromNext() {
 }
 
 function init() {
+  window.addEventListener('rufy-draft-resumed',()=>{ currentModes.clear(); decorateWorkout(); });
   injectStyles();
   ensureEditOverlay();
 

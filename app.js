@@ -143,6 +143,7 @@ async function renderHome(){
   }
 }
 function startWorkout(letter){
+  if(state.sessionDraft){ resumeSession(); toast('Ripresa la seduta in corso. Scartala prima di iniziarne un’altra.'); return; }
   state.currentWorkout=letter;
   state.sessionDraft=null;
   document.getElementById('precheckPanel').classList.remove('hidden');
@@ -153,6 +154,8 @@ function startWorkout(letter){
   setView('workout');
 }
 async function beginSession(){
+  if(state.sessionDraft){ resumeSession(); return; }
+  if(!state.currentWorkout) state.currentWorkout=state.settings.nextWorkout;
   const recovery={
     sleep:numOrNull(document.getElementById('sleepScore').value),
     fatigue:numOrNull(document.getElementById('fatigueScore').value),
@@ -175,6 +178,7 @@ async function beginSession(){
   document.getElementById('sessionPanel').classList.remove('hidden');
   document.getElementById('sessionTitle').textContent=`Full Body ${state.currentWorkout}`;
   document.getElementById('sessionGuidance').textContent=phaseInfo().text;
+  document.getElementById('sessionNote').value='';
   renderSessionExercises();
 }
 function numOrNull(v){ const n=Number(v); return v===''||!Number.isFinite(n)?null:n; }
@@ -210,6 +214,7 @@ function renderSessionExercises(){
     list.appendChild(el);
   });
   bindSessionControls();
+  persistDraft();
 }
 function libraryOptions(selected){
   return state.library.map(x=>`<option value="${esc(x.id)}" ${x.id===selected?'selected':''}>${esc(x.name)}</option>`).join('');
@@ -235,6 +240,7 @@ function bindSessionControls(){
   document.querySelectorAll('.sets input').forEach(inp=>inp.addEventListener('input',()=>{
     const s=state.sessionDraft.exercises[+inp.dataset.idx].setData[+inp.dataset.si];
     s[inp.dataset.field]=inp.value;
+    persistDraft();
   }));
   document.querySelectorAll('.rir button').forEach(b=>b.addEventListener('click',()=>{
     state.sessionDraft.exercises[+b.dataset.idx].setData[+b.dataset.si].rir=b.dataset.rir; renderSessionExercises();
@@ -251,30 +257,127 @@ function bindSessionControls(){
     if(alt){ ex.actualId=alt.id; ex.actualName=alt.name; ex.muscle=alt.muscle; renderSessionExercises(); }
   }));
 }
-async function saveSession(){
+// A synchronous local write on every edit survives an immediate app close.
+// Drafts are separate from the archive and never trigger a backup download.
+const DRAFT_KEY='rufyBuilding.sessionDraft.v1';
+function draftStatus(message){
+  document.getElementById('draftStatus').textContent=message;
+}
+function renderDraftCard(){
+  const draft=state.sessionDraft;
+  document.getElementById('draftCard').classList.toggle('hidden',!draft);
+  if(draft) document.getElementById('draftSummary').textContent=`Full Body ${draft.workout} · ${fmtDate(draft.date)}`;
+}
+function persistDraft(){
   if(!state.sessionDraft) return;
-  state.sessionDraft.note=document.getElementById('sessionNote').value.trim();
-  state.sessionDraft.exercises.forEach(ex=>{
-    ex.sets=ex.setData.length;
-    ex.setsData=undefined;
-    ex.sets=ex.setData.map(s=>({kg:toNum(s.kg),reps:toNum(s.reps),rir:s.rir})).filter(s=>s.kg!==null||s.reps!==null||s.rir!=='');
-    delete ex.setData;
-  });
-  // Normalize property name to "sets" array for stored sessions.
-  state.sessionDraft.exercises.forEach(ex=>{
-    if(!Array.isArray(ex.sets)) ex.sets=[];
-  });
-  await dbAddSession(state.sessionDraft);
-  if(!state.settings.firstSessionDate) state.settings.firstSessionDate=state.sessionDraft.date;
-  const cycle={A:'B',B:'C',C:'A'}; state.settings.nextWorkout=cycle[state.currentWorkout]||state.settings.nextWorkout;
-  await dbSetKV('settings',state.settings);
+  state.sessionDraft.note=document.getElementById('sessionNote').value;
+  state.sessionDraft.updatedAt=Date.now();
+  try{
+    localStorage.setItem(DRAFT_KEY,JSON.stringify(state.sessionDraft));
+    draftStatus(`Bozza salvata · ${new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`);
+  }catch(error){
+    console.error('Salvataggio bozza non riuscito',error);
+    draftStatus('Attenzione: bozza non salvata. Mantieni aperta l’app e salva la seduta.');
+  }
+  renderDraftCard();
+}
+async function loadDraft(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);
+    if(!raw) return;
+    const draft=JSON.parse(raw);
+    if(!draft.id || !['A','B','C'].includes(draft.workout) || !Array.isArray(draft.exercises) ||
+       !draft.exercises.every(ex=>Array.isArray(ex.setData))) throw new Error('Bozza non valida');
+    // A close after archive commit but before draft removal must not duplicate a session.
+    const saved=await new Promise((resolve,reject)=>{
+      const req=store('sessions').get(draft.id);
+      req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+    });
+    if(saved){ localStorage.removeItem(DRAFT_KEY); return; }
+    state.sessionDraft=draft;
+    state.currentWorkout=draft.workout;
+    document.getElementById('sessionNote').value=draft.note||'';
+    document.getElementById('precheckPanel').classList.add('hidden');
+    document.getElementById('sessionPanel').classList.remove('hidden');
+    document.getElementById('sessionTitle').textContent=`Full Body ${draft.workout}`;
+    document.getElementById('sessionGuidance').textContent=phaseInfo().text;
+    renderSessionExercises();
+    window.dispatchEvent(new Event('rufy-draft-resumed'));
+  }catch(error){
+    console.error('Recupero bozza non riuscito',error);
+    toast('Bozza non recuperabile: i dati conservati non sono stati cancellati.');
+  }
+}
+function resumeSession(){
+  if(!state.sessionDraft) return;
+  document.getElementById('precheckPanel').classList.add('hidden');
+  document.getElementById('sessionPanel').classList.remove('hidden');
+  setView('workout');
+}
+function discardDraft(){
+  if(!state.sessionDraft) return;
+  if(!window.confirm('Vuoi scartare la seduta in corso?')) return;
+  if(!window.confirm('CONFERMA DEFINITIVA: tutti i dati della seduta non salvata verranno eliminati. Continuare?')) return;
+  try{ localStorage.removeItem(DRAFT_KEY); }
+  catch(error){ toast('Impossibile eliminare la bozza. Riprova.'); return; }
   state.sessionDraft=null;
-  toast('Seduta salvata');
-  setView('home');
+  document.getElementById('sessionNote').value='';
+  document.getElementById('sessionPanel').classList.add('hidden');
+  document.getElementById('precheckPanel').classList.remove('hidden');
+  window.dispatchEvent(new Event('rufy-draft-resumed'));
+  renderDraftCard(); setView('home');
+}
+// Keep the existing weight-mode extension in sync with the recoverable draft.
+window.rufyDraftModes={
+  get:idx=>state.sessionDraft?.exercises[idx]?.weightMode,
+  set:(idx,mode)=>{
+    const ex=state.sessionDraft?.exercises[idx];
+    if(ex){ ex.weightMode=mode; persistDraft(); }
+  }
+};
+async function saveSession(){
+  if(!state.sessionDraft || saveSession.saving) return;
+  saveSession.saving=true;
+  const button=document.getElementById('saveSessionBtn'); button.disabled=true;
+  persistDraft();
+  // Normalize a copy: a failed archive write leaves the editable draft intact.
+  const session=JSON.parse(JSON.stringify(state.sessionDraft));
+  session.note=session.note.trim();
+  session.exercises.forEach(ex=>{
+    ex.sets=ex.setData.map(s=>({kg:toNum(s.kg),reps:toNum(s.reps),rir:s.rir}))
+      .filter(s=>s.kg!==null||s.reps!==null||s.rir!=='');
+    delete ex.setData; delete ex.setsData;
+  });
+  const settings={...state.settings};
+  if(!settings.firstSessionDate) settings.firstSessionDate=session.date;
+  const cycle={A:'B',B:'C',C:'A'};
+  settings.nextWorkout=cycle[session.workout]||settings.nextWorkout;
+  try{
+    await new Promise((resolve,reject)=>{
+      const tx=state.db.transaction(['sessions','kv'],'readwrite');
+      tx.objectStore('sessions').put(session);
+      tx.objectStore('kv').put({key:'settings',value:settings});
+      tx.oncomplete=resolve;
+      tx.onerror=()=>reject(tx.error);
+      tx.onabort=()=>reject(tx.error||new Error('Salvataggio interrotto'));
+    });
+    state.settings=settings;
+    try{ localStorage.removeItem(DRAFT_KEY); }catch(error){ console.error(error); }
+    state.sessionDraft=null;
+    document.getElementById('sessionNote').value='';
+    document.getElementById('sessionPanel').classList.add('hidden');
+    document.getElementById('precheckPanel').classList.remove('hidden');
+    renderDraftCard(); toast('Seduta salvata'); setView('home');
+  }catch(error){
+    console.error(error);
+    toast('Salvataggio non riuscito. La seduta resta disponibile: riprova.');
+  }finally{
+    saveSession.saving=false; button.disabled=false;
+  }
 }
 function toNum(v){ if(v===''||v===null||v===undefined) return null; const n=Number(v); return Number.isFinite(n)?n:null; }
 function cancelSession(){
-  state.sessionDraft=null; document.getElementById('sessionPanel').classList.add('hidden'); document.getElementById('precheckPanel').classList.remove('hidden'); setView('home');
+  persistDraft(); setView('home');
 }
 function addCustomExercise(){
   if(!state.sessionDraft) return;
@@ -510,6 +613,9 @@ function bind(){
   document.getElementById('startNextBtn').addEventListener('click',()=>startWorkout(state.settings.nextWorkout));
   document.querySelectorAll('.workout-choice').forEach(b=>b.addEventListener('click',()=>startWorkout(b.dataset.workout)));
   document.getElementById('beginSessionBtn').addEventListener('click',beginSession);
+  document.getElementById('resumeDraftBtn').addEventListener('click',resumeSession);
+  document.getElementById('discardDraftBtn').addEventListener('click',discardDraft);
+  document.getElementById('sessionNote').addEventListener('input',persistDraft);
   document.getElementById('cancelSessionBtn').addEventListener('click',cancelSession);
   document.getElementById('saveSessionBtn').addEventListener('click',saveSession);
   document.getElementById('addExerciseBtn').addEventListener('click',addCustomExercise);
@@ -530,7 +636,7 @@ function bind(){
 
 async function init(){
   try{
-    state.db=await openDB(); await initData(); populateLibrarySelects(); bind(); registerSW(); await renderHome();
+    state.db=await openDB(); await initData(); populateLibrarySelects(); bind(); registerSW(); await loadDraft(); renderDraftCard(); await renderHome();
   }catch(e){
     document.body.innerHTML='<main style="padding:24px;color:white;background:#090c12;font-family:system-ui"><h1>Rufy Building</h1><p>Impossibile inizializzare il database locale in questo browser.</p></main>';
   }
