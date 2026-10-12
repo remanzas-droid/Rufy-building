@@ -173,6 +173,7 @@ function updateWeightButton(btn, card, mode) {
 }
 
 function decorateWorkout() {
+  if(document.getElementById('sessionPanel')?.classList.contains('hidden')) return;
   document.querySelectorAll('#exerciseList .exercise-card').forEach(card => {
     const controls = card.querySelector('.exercise-controls');
     const idxEl = card.querySelector('[data-idx]');
@@ -206,7 +207,7 @@ function decorateWorkout() {
     currentModes.set(idx, 'total');
     updateWeightButton(btn, card, 'total');
     findLastModeByExerciseName(name).then(mode => {
-      if (document.body.contains(card) && !window.rufyDraftModes?.get(idx) && currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
+      if (document.body.contains(card) && !document.getElementById('sessionPanel')?.classList.contains('hidden') && !window.rufyDraftModes?.get(idx) && currentModes.get(idx) === 'total' && mode === 'perDumbbell') {
         currentModes.set(idx, mode);
         window.rufyDraftModes?.set(idx, mode);
         if (document.body.contains(card)) updateWeightButton(btn, card, mode);
@@ -589,6 +590,11 @@ function initializeWorkoutFromNext() {
 }
 
 function init() {
+  window.addEventListener('rufy-draft-discarded',()=>{
+    currentModes.clear();
+    backupRequest=null;
+    clearTimeout(backupRequestTimer);
+  });
   window.addEventListener('rufy-draft-resumed',()=>{ currentModes.clear(); decorateWorkout(); });
   injectStyles();
   ensureEditOverlay();

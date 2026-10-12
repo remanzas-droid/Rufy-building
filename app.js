@@ -314,18 +314,44 @@ function resumeSession(){
   document.getElementById('sessionPanel').classList.remove('hidden');
   setView('workout');
 }
+let discardStep=0;
+let discardId=null;
+function closeDiscardDialog(){
+  document.getElementById('discardDialog').close();
+  discardStep=0; discardId=null;
+}
 function discardDraft(){
   if(!state.sessionDraft) return;
-  if(!window.confirm('Vuoi scartare la seduta in corso?')) return;
-  if(!window.confirm('CONFERMA DEFINITIVA: tutti i dati della seduta non salvata verranno eliminati. Continuare?')) return;
+  discardStep=1; discardId=state.sessionDraft.id;
+  document.getElementById('discardDialogTitle').textContent='Scartare la seduta in corso?';
+  document.getElementById('discardDialogText').textContent='La seduta non è ancora nello storico. Per eliminarla dovrai confermare anche nel passaggio successivo.';
+  document.getElementById('confirmDiscardBtn').textContent='Continua';
+  document.getElementById('discardDialog').showModal();
+}
+function confirmDiscardDraft(){
+  if(!state.sessionDraft || state.sessionDraft.id!==discardId){ closeDiscardDialog(); return; }
+  if(discardStep===1){
+    discardStep=2;
+    document.getElementById('discardDialogTitle').textContent='Conferma definitiva';
+    document.getElementById('discardDialogText').textContent='Eliminare tutti i dati della seduta in corso? Lo storico degli allenamenti salvati resta conservato.';
+    document.getElementById('confirmDiscardBtn').textContent='Scarta definitivamente';
+    return;
+  }
+  if(discardStep!==2) return;
   try{ localStorage.removeItem(DRAFT_KEY); }
-  catch(error){ toast('Impossibile eliminare la bozza. Riprova.'); return; }
-  state.sessionDraft=null;
+  catch(error){ closeDiscardDialog(); toast('Impossibile eliminare la bozza. Riprova.'); return; }
+  closeDiscardDialog();
+  state.sessionDraft=null; state.currentWorkout=null;
   document.getElementById('sessionNote').value='';
+  document.getElementById('exerciseList').replaceChildren();
+  document.getElementById('draftStatus').textContent='';
   document.getElementById('sessionPanel').classList.add('hidden');
   document.getElementById('precheckPanel').classList.remove('hidden');
-  window.dispatchEvent(new Event('rufy-draft-resumed'));
+  document.getElementById('precheckTitle').textContent='Check rapido';
+  // Reset extension state without decorating the discarded exercise cards.
+  window.dispatchEvent(new Event('rufy-draft-discarded'));
   renderDraftCard(); setView('home');
+  toast('Seduta scartata');
 }
 // Keep the existing weight-mode extension in sync with the recoverable draft.
 window.rufyDraftModes={
@@ -615,6 +641,9 @@ function bind(){
   document.getElementById('beginSessionBtn').addEventListener('click',beginSession);
   document.getElementById('resumeDraftBtn').addEventListener('click',resumeSession);
   document.getElementById('discardDraftBtn').addEventListener('click',discardDraft);
+  document.getElementById('confirmDiscardBtn').addEventListener('click',confirmDiscardDraft);
+  document.getElementById('cancelDiscardBtn').addEventListener('click',closeDiscardDialog);
+  document.getElementById('discardDialog').addEventListener('cancel',()=>{ discardStep=0; discardId=null; });
   document.getElementById('sessionNote').addEventListener('input',persistDraft);
   document.getElementById('cancelSessionBtn').addEventListener('click',cancelSession);
   document.getElementById('saveSessionBtn').addEventListener('click',saveSession);

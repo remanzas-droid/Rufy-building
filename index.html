@@ -267,6 +267,15 @@
     <button class="nav-btn" data-view="program" type="button">Programma</button>
   </nav>
 
+  <dialog id="discardDialog" aria-labelledby="discardDialogTitle" aria-describedby="discardDialogText">
+    <h2 id="discardDialogTitle">Scartare la seduta?</h2>
+    <p id="discardDialogText"></p>
+    <div class="action-row">
+      <button id="cancelDiscardBtn" class="ghost" type="button">Annulla</button>
+      <button id="confirmDiscardBtn" class="danger" type="button">Continua</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>

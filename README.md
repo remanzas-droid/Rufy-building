@@ -59,3 +59,10 @@ Questa cartella è pronta per essere pubblicata direttamente come sito statico.
 - Ripristinato il caricamento del modulo esistente per modalità peso, modifica storico e backup automatico.
 - La bozza resta sullo stesso dispositivo e indirizzo dell'app. Non è un backup: cancellare i dati del sito la elimina. Non recupera dati persi prima dell'aggiornamento.
 - Per aggiornare una PWA già installata, aprirla online, chiuderla e riaprirla dopo l'installazione del nuovo service worker. Non cancellare i dati del sito.
+
+## Correzione V1.4.1 — scarta seduta
+
+- Doppia conferma nella stessa finestra dell'app, senza due finestre di conferma bloccanti del browser.
+- Dopo lo scarto vengono rimossi anche i controlli della vecchia seduta e azzerata la modalità peso, senza ridisegnare esercizi nascosti.
+- I recuperi asincroni della modalità peso non agiscono su sedute chiuse o scartate.
+- Annullare uno dei due passaggi conserva la bozza. Dopo la conferma definitiva si può iniziare una nuova seduta o navigare normalmente.

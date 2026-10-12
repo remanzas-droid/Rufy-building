@@ -76,3 +76,7 @@ hr{border:0;border-top:1px solid #223044;margin:18px 0}
   #app{padding:12px}.card{padding:14px}
   .bottom-nav{padding-left:4px;padding-right:4px}.nav-btn{font-size:10px}
 }
+
+#discardDialog{width:min(440px,calc(100% - 32px));max-height:calc(100dvh - 48px);overflow:auto;box-sizing:border-box;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:20px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+#discardDialog::backdrop{background:rgba(3,6,10,.8)}
+#discardDialog .action-row{justify-content:flex-end;flex-wrap:wrap}
